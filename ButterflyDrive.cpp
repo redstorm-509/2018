@@ -10,11 +10,13 @@ class Robot: public frc::SampleRobot {
 
 bool tractionDown = false;
 bool gyroenabled = false;
+bool isJoystick = true;
 double PI = 3.14159;
 bool IsMechanum = true;
 float Sminimum = .2;
 float TurnMax = .5;
 float TurnMin = .27;
+float sCurveFactor = .5;
 
 
 public:
@@ -37,7 +39,10 @@ public:
 		m_lf.Set(-LY);
 		m_lr.Set(-LY);
 		m_rf.Set(RY);
-		m_rr.Set(-RY);
+		m_rr.Set(RY);
+	}
+	double sCurve(float joyVal){
+		return (((1-sCurveFactor)*pow(joyVal,3)) + (sCurveFactor*joyVal));
 	}
 	void CanMechanum(float RX, float RY, float LX, float robotangle){
 
@@ -103,7 +108,7 @@ public:
 		m_lf.Set(lfVal);
 		m_lr.Set(lrVal);
 		m_rf.Set(rfVal);
-		m_rr.Set(-rrVal);
+		m_rr.Set(rrVal);
 	}
 
 	float TurnTo(int theta) {
@@ -145,49 +150,131 @@ public:
 		return speed;
 
 	}
+	void Accessories() {
+		m_lifter.Set(opstick.GetY());
+		smtNUM("GetY", xdrive.GetY());
+		smtNUM("GetYChannel", xdrive.GetYChannel());
+		m_rIntake.Set(xdrive.GetThrottle());
+		m_lIntake.Set(-xdrive.GetThrottle());
+		if (opstick.GetRawButton(5)){
+			m_rIntake.Set(-.95);
+			m_lIntake.Set(.95);
+		}
+		if (opstick.GetRawButton(1)){
+			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
+		}
+		else {
+			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kReverse);
+		}
+
+	}
 
 	void OperatorControl() {
+		xdrive.SetXChannel(4);
+		xdrive.SetYChannel(5);
+		xdrive.SetZChannel(0);
+		xdrive.SetThrottleChannel(1);
+		opstick.SetYChannel(1);
 
 		//while(MotionTracker.IsCalibrating()){}
 		Comp->SetClosedLoopControl(true);
 		while (IsOperatorControl() && IsEnabled()) {
+			smtNUM("xdrift", rstick.GetX());
+			Accessories();
+			float rightX;
+			float rightY;
+			float leftX;
+			float leftY;
 
-			if (rstick.GetRawButton(4)){
-				MotionTracker.Reset();
+			bool holdDown;
+
+			if (rstick.GetRawButton(9) || xdrive.GetRawButton(8)){
+				isJoystick = false;
 			}
-			if (rstick.GetRawButton(2)){
-				IsMechanum = false;
+			if (rstick.GetRawButton(8) || xdrive.GetRawButton(7)){
+				isJoystick = true;
 			}
-			else if (lstick.GetRawButton(2)) {
-				IsMechanum = true;
+			if (isJoystick){
+				rightX = rstick.GetX();
+				rightY = rstick.GetY();
+				leftX = lstick.GetX();
+				leftY = lstick.GetY();
+				if (rstick.GetRawButton(3)){
+					MotionTracker.Reset();
+				}
+				if (rstick.GetRawButton(2)){
+					IsMechanum = true;
+				}
+				else if ( lstick.GetRawButton(2)){
+					IsMechanum = false;
+				}
+				if ((rstick.GetRawButton(1) && lstick.GetRawButton(1))){
+					holdDown = true;
+				}
+				else {
+					holdDown = false;
+				}
+
 			}
+			else {
+				rightX = xdrive.GetX();
+				rightY = xdrive.GetY();
+				leftX = xdrive.GetZ();
+				leftY = xdrive.GetThrottle();
+				if (xdrive.GetPOV() != -1){
+					leftX = TurnTo(xdrive.GetPOV());
+				}
+				if (xdrive.GetRawButton(4)){
+					MotionTracker.Reset();
+				}
+				if (xdrive.GetRawButton(6)){
+					IsMechanum = true;
+				}
+				else if ( xdrive.GetRawButton(5)){
+					IsMechanum = false;
+				}
+				if (xdrive.GetTwist() >= .25){
+					holdDown = true;
+				}
+				else {
+					holdDown = false;
+				}
+			}
+
 			if (IsMechanum){
-				if (rstick.GetRawButton(1) && lstick.GetRawButton(1)){
-					tankDrive(rstick.GetY(),lstick.GetY());
+				if (holdDown){
+					tankDrive(rightY, leftY);
 					butterflySol.Set(frc::DoubleSolenoid::kForward);
 				}
 				else {
 					butterflySol.Set(frc::DoubleSolenoid::kReverse);
-					CanMechanum(rstick.GetX(), -rstick.GetY(), (lstick.GetX()/2), MotionTracker.GetAngle());
+					CanMechanum(rightX, -rightY, (leftX/2), MotionTracker.GetAngle());
 				}
 			}
 			else if (!IsMechanum){
-				tankDrive(rstick.GetY(),lstick.GetY());
+				tankDrive(rightY,leftY);
 				butterflySol.Set(frc::DoubleSolenoid::kForward);
 			}
+			Wait(kUpdatePeriod);
 
 		}
 	}
 
 private:
-	frc::Joystick rstick { 0 };
-	frc::Joystick lstick { 1 };
+	frc::Joystick rstick  { 0 };
+	frc::Joystick lstick  { 1 };
+	frc::Joystick xdrive  { 2 };
+	frc::Joystick opstick { 3 };
 	WPI_TalonSRX m_rf { 1 };
 	WPI_TalonSRX m_rr { 12 };
 	WPI_TalonSRX m_lf { 0 };
 	WPI_TalonSRX m_lr { 13 };
+	WPI_TalonSRX m_lifter { 2 };
+	WPI_TalonSRX m_rIntake { 14 };
+	WPI_TalonSRX m_lIntake { 15 };
 	AHRS MotionTracker {SPI::Port::kMXP}; //new motion tracker
-	DoubleSolenoid butterflySol {0, 1};
+	DoubleSolenoid grabSol {0, 1};//change back after
+	DoubleSolenoid butterflySol {2, 3};//Change back after
 	Compressor *Comp = new Compressor (0);
 	static constexpr double kUpdatePeriod = 0.005;
 };
