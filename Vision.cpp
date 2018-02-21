@@ -1,5 +1,4 @@
 
-
 int imageXsize = 320, imageYsize = 240;
 std::vector<double> visionX;
 std::vector<double> visionY;
@@ -52,15 +51,15 @@ int GetMinYIndex(){
 
 void Locate(){
 	
-	int index = GetMinYIndex();
+	int Tindex = GetMinYIndex();
 	
-	if (target == true && index != NULL) {
+	if (target == true && Tindex != NULL) {
 		
 		
-		yval = visionY[index];
-		xval = visionX[index];
+		yval = visionY[Tindex];
+		xval = visionX[Tindex];
 		
-		ypos = ((yval - Ydesired)/(imageYsize / 2));
+		ypos = ((yval - Ydesired)/(imageYsize / 2)); //gives the position in terms of 1 to -1 which can also be used for proportional movement speed
 		xpos = ((xval - Xdesired)/(imageXsize / 2));
 		
 		CanMechanum(xpos, ypos, 0, 0);
