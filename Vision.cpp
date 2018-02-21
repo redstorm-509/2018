@@ -52,7 +52,7 @@ int GetMinYIndex(){
 
 void Locate(){
 	
-	int index = GetMInYIndex();
+	int index = GetMinYIndex();
 	
 	if (target == true && index != NULL) {
 		
