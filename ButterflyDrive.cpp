@@ -1,3 +1,4 @@
+#include <iostream>
 #include <Joystick.h>
 #include <SampleRobot.h>
 #include <Talon.h>
@@ -8,10 +9,12 @@
 #include <networktables/NetworkTable.h>
 #include <networktables/NetworkTableInstance.h>
 #include <networktables/NetworkTableEntry.h>
+#include <json.hpp>
 
 class Robot: public frc::SampleRobot {
-
+nlohmann::json recorderJson;
 bool tractionDown = false;
+bool grablock = false;
 bool gyroenabled = false;
 bool isJoystick = true;
 double PI = 3.14159;
@@ -104,23 +107,28 @@ public:
 		float rfVal = -RY + LX + RX;
 		float rrVal = -RY + LX - RX;
 
-		float maxval = lfVal;
-		if (lrVal>maxval) {
+		float maxval = ABS(lfVal);
+		if (ABS(lrVal)>maxval) {
 			maxval = lrVal;
 		}
-		if (rfVal>maxval) {
+		if (ABS(rfVal)>maxval) {
 			maxval = rfVal;
 		}
-		if (rrVal>maxval) {
+		if (ABS(rrVal)>maxval) {
 			maxval = rrVal;
 		}
 
 		if (ABS(maxval) > 1){
-			lfVal = ((lfVal / ABS(maxval))*(mag/sqrt(2)));
-			lrVal = ((lrVal / ABS(maxval))*mag/sqrt(2));
-			rfVal = ((rfVal / ABS(maxval))*mag/sqrt(2));
-			rrVal = ((rrVal / ABS(maxval))*mag/sqrt(2));
+			lfVal = ((lfVal / ABS(maxval))*mag);
+			lrVal = ((lrVal / ABS(maxval))*mag);
+			rfVal = ((rfVal / ABS(maxval))*mag);
+			rrVal = ((rrVal / ABS(maxval))*mag);
 		}
+
+		smtNUM("lfVal", lfVal);
+		smtNUM("lrVal", lrVal);
+		smtNUM("rfVal", rfVal);
+		smtNUM("rrVal", rrVal);
 
 		m_lf.Set(lfVal);
 		m_lr.Set(lrVal);
@@ -215,8 +223,8 @@ public:
 		int Tindex = GetMaxYIndex();
 
 		if (target == true && Tindex != -1) {
-
-
+			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
+			grablock = true;
 			yval = visionY[Tindex];
 			xval = visionX[Tindex];
 
@@ -240,25 +248,27 @@ public:
 				ypos = 0;
 			}
 
-			if (xpos < -.05){
-				xpos -= TargetMin;
-			}
-			else if (xpos > .05){
-				xpos += TargetMin;
-			}
-			else{
-				xpos = 0;
-			}
+//			if (xpos < -.05){
+//				xpos -= .1;
+//			}
+//			else if (xpos > .05){
+//				xpos += TargetMin;
+//			}
+//			else{
+//				xpos = 0;
+//			}
 			smtNUM("Xpos", xpos);
 			smtNUM("Ypos", ypos);
 			CanMechanum(xpos, ypos, 0, 0);
 
 		}
 		else {
+			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kReverse);
 			smtBOOL("Located", false);
 			//CanMechanum(0, 0, .5, 0);
 		}
 
+		grablock = false;
 	}
 
 	void Accessories() {
@@ -274,7 +284,7 @@ public:
 		if (opstick.GetRawButton(1)){
 			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
 		}
-		else {
+		else if (!grablock&&!endGame){
 			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kReverse);
 		}
 		if (opstick.GetRawButton(3)){
@@ -284,18 +294,31 @@ public:
 			endGame = false;
 		}
 		if (endGame){
-			if (ABS(opstick.GetY()) > .025){
+			if (ABS(opstick.GetY()) > .3){
 				brakeSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
 			}
 			else{
 				brakeSol.Set(DoubleSolenoid::DoubleSolenoid::kReverse);
 			}
+			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
 		}
 		else {
 			brakeSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
 		}
 	}
 
+	void inputRecorder(std::string timestamp, std::vector<float> inputVector){
+		recorderJson[timestamp] = inputVector;
+		std::cout<<recorderJson[timestamp]<< ","<<std::endl;
+	}
+
+	void playAuto(std::string timestamp, nlohmann::json autojson){
+		CanMechanum(autojson[timestamp][0], autojson[timestamp][1], autojson[timestamp][2], MotionTracker.GetAngle());
+		if (autojson[timestamp][3]){
+			
+		}
+	}
+	
 	void OperatorControl() {
 		xdrive.SetXChannel(4);
 		xdrive.SetYChannel(5);
@@ -321,12 +344,12 @@ public:
 			float leftY;
 
 			CAM();
-			bool holdDown;
+			//bool holdDown;
 
 			smtNUM("Zval", rstick.GetZ());
 
 			if (rstick.GetRawButton(9) || xdrive.GetRawButton(8)){
-				isJoystick = false;
+				isJoystick = true;
 			}
 			if (rstick.GetRawButton(8) || xdrive.GetRawButton(7)){
 				isJoystick = true;
@@ -345,12 +368,12 @@ public:
 				else if ( lstick.GetRawButton(2)){
 					IsMechanum = false;
 				}
-				if ((rstick.GetRawButton(1) && lstick.GetRawButton(1))){
-					holdDown = true;
-				}
-				else {
-					holdDown = false;
-				}
+//				if ((rstick.GetRawButton(1) && lstick.GetRawButton(1))){
+//					holdDown = true;
+//				}
+//				else {
+//					holdDown = false;
+//				}
 
 
 			}
@@ -384,12 +407,15 @@ public:
 					tankDrive(rightY, leftY);
 					butterflySol.Set(frc::DoubleSolenoid::kForward);
 				}
-				else if (rstick.GetRawButton(7)){
+				else if (rstick.GetRawButton(1)){
 					Locate();
 				}
 				else {
 					butterflySol.Set(frc::DoubleSolenoid::kReverse);
-					CanMechanum(rightX, -rightY, (leftX/2), MotionTracker.GetAngle());
+					smtNUM("Joystick In Y", rightY);
+					smtNUM("Joystick in X", rightX/sqrt(2));
+					smtNUM("Joystick in turn", leftX);
+					CanMechanum(rightX/sqrt(2), -rightY, (leftX/2), MotionTracker.GetAngle());
 				}
 			}
 			else if (!IsMechanum){
@@ -407,30 +433,33 @@ public:
 				opstick.SetRumble(Joystick::kLeftRumble, 0);
 			}
 
-
+			if (rstick.GetRawButton(7)){
+				std::vector<float> inputVector = {rightX/sqrt(2), -rightY, (leftX/2),
+												  opstick.GetRawButton(1), opstick.GetRawButton(6),
+												  opstick.GetThrottle()};
+				inputRecorder("", inputVector);
+			}
 
 			Wait(kUpdatePeriod);
 
 		}
 	}
-	void move(float XDisp, float YDisp, float mag = .95){
+	void move(float XDisp, float YDisp, float TurnAngle = 0, float mag = .95){
 		smtNUM("moveInitializeNUM", MotionTracker.GetDisplacementX());
 		double initialXDisp = MotionTracker.GetDisplacementX();
 		double initialYDisp = MotionTracker.GetDisplacementY();
 		double speedX = 0;
 		double speedY = 0;
 
-		XDisp = (XDisp - .528)/110;
-		YDisp = ((YDisp*12) - .528)/110;
+		XDisp = .75*((XDisp*12) - .528)/110;
+		YDisp = .75*((YDisp*12) - .528)/110;
 		smtNUM("YDisp", YDisp);
 
 		SminimumY = YDisp;
 		SminimumX = XDisp;
 
 		while(isAutonomoose){
-			//double speedX = ((((XDisp - (MotionTracker.GetDisplacementX()-initialXDisp))/(1))/(1/(mag - Sminimum))));
-			//if (((XDisp-(MotionTracker.GetDisplacementX()-initialXDisp))/XDisp) >= .5){
-				if (XDisp != 0){
+				if (ABS(XDisp) > .05 && ABS(XDisp-(MotionTracker.GetDisplacementX())) >= .05){
 					speedX = mag*(((XDisp-(MotionTracker.GetDisplacementX()-initialXDisp))/XDisp));
 					if (ABS(speedX) < SminimumX){
 						if (speedX < 0){
@@ -443,7 +472,7 @@ public:
 				}
 				else
 					speedX = 0;
-				if (YDisp != 0){
+				if (ABS(YDisp) > .05 && ABS(YDisp-(MotionTracker.GetDisplacementY())) >= .05){
 					speedY = mag*(((YDisp-(MotionTracker.GetDisplacementY()-initialYDisp))/YDisp));
 					if (ABS(speedY) < SminimumY){
 						if (speedY < 0){
@@ -487,14 +516,32 @@ public:
 				break;
 			}
 //(1-(ABS(MotionTracker.GetDisplacementY()-initialYDisp))/1.5)
-			if ((ABS(MotionTracker.GetVelocityX())< .04 && ABS(MotionTracker.GetVelocityY())<.04) && .90 <= ((MotionTracker.GetDisplacementY()-initialYDisp))/YDisp){
+			if ((ABS(MotionTracker.GetVelocityX())< .04 && ABS(MotionTracker.GetVelocityY())<.04) && .75 <= ((MotionTracker.GetDisplacementY()-initialYDisp))/YDisp){
 				break;
 			}
+			if (speedY > 1){
+				speedY = 1;
+			}
+			if (speedY < -1){
+				speedY = -1;
+			}
+			if (speedX > 1){
+				speedX = 1;
+			}
+			if (speedX < -1){
+				speedX = -1;
+			}
+			CanMechanum(speedX, speedY, TurnTo(TurnAngle), MotionTracker.GetAngle());
+			if (IsOperatorControl() || !IsEnabled()){
+				break;
+			}
+		}
 
-			CanMechanum(speedX, speedY, 0, MotionTracker.GetAngle());
-			if (IsOperatorControl()){
-				break;
-			}
+		if (speedY > 1){
+			speedY = 1;
+		}
+		if (speedY < -1){
+			speedY = -1;
 		}
 		smtSTR("HIT");
 		CanMechanum(0, 0, 0, 0);
@@ -502,43 +549,42 @@ public:
 
 	void Autonomous(){
 		isAutonomoose = true;
+		gyroenabled = true;
 		MotionTracker.Reset();
-		bool isRightSwitch = true;
-		//brakeSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
+		bool isRightSwitch = false;
+		m_lifter.Set(-.95);
+		m_rIntake.Set(.95);
+		m_lIntake.Set(-.95);
 
 
-
-		//m_lifter.Set(.5);
-		//m_rIntake.Set(.95);
-		//m_lIntake.Set(-.95);
-		//Wait(1);
-		//m_lifter.Set(0);
-		//grabSol.Set(DoubleSolenoid::DoubleSolenoid::kReverse);
-
-		//Wait(.75);
-		//m_lifter.Set(-.95);
-		//Wait(2);
+		Wait(2);
 		m_lifter.Set(0);
+		Wait(1);
 		m_rIntake.Set(0);
 		m_lIntake.Set(0);
 
+		grabSol.Set(DoubleSolenoid::DoubleSolenoid::kReverse);
+
+
 		StartPosition = 4;
-//		std::string gameData;
-//		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
-//		if(gameData.length() > 0){
-//			if(gameData[0] == 'R'){
-//				isRightSwitch = true;
-//			}
-//			else {
-//				isRightSwitch = false;
-//			}
-//		}
+		std::string gameData;
+		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
+		if(gameData.length() > 0){
+			if(gameData[0] == 'R'){
+				isRightSwitch = true;
+			}
+			else {
+				isRightSwitch = false;
+			}
+		}
 
 
 
 
 		if (isRightSwitch&&StartPosition == 1){
-			move(0, 14);
+			CanMechanum(-.3, .75, 0, MotionTracker.GetAngle());
+			Wait(1.87);
+			CanMechanum(0, 0, 0, 0);
 		}
 		else if (isRightSwitch&&StartPosition == 2){
 			//Lift lifter
@@ -553,8 +599,9 @@ public:
 		}
 		else if (isRightSwitch&&StartPosition == 3){
 			//Lift
-			move(0,14);
-			TurnTo(270);
+			CanMechanum(0, .75, 0, MotionTracker.GetAngle());
+			Wait(1.57);
+			CanMechanum(0, 0, 0, 0);
 			m_rIntake.Set(-.95);
 			m_lIntake.Set(.95);
 			Wait(1);
@@ -564,8 +611,9 @@ public:
 		}
 		else if (!isRightSwitch&&StartPosition == 1){
 			//Lift
-			move(0,14);
-			TurnTo(90);
+			CanMechanum(0, .75, 0, MotionTracker.GetAngle());
+			Wait(2);
+			CanMechanum(0, 0, 0, 0);
 			m_rIntake.Set(-.95);
 			m_lIntake.Set(.95);
 			Wait(1);
@@ -584,16 +632,20 @@ public:
 			//Shoot cube
 		}
 		else if(!isRightSwitch&&StartPosition == 3){
-			move(0, 14);
+			CanMechanum(.3, .75, 0, MotionTracker.GetAngle());
+			Wait(1.87);
+			CanMechanum(0, 0, 0, 0);
 		}
 		else {
 			smtNUM("Zval", rstick.GetZ());
-			move(0, 8);
+			CanMechanum(0, .75, 0, MotionTracker.GetAngle());
+			Wait(2);
+			CanMechanum(0, 0, 0, 0);
 		}
 
 
 
-
+		gyroenabled = false;
 		isAutonomoose = false;
 	}
 
