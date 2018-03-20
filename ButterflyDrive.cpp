@@ -266,9 +266,10 @@ public:
 			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kReverse);
 			smtBOOL("Located", false);
 			//CanMechanum(0, 0, .5, 0);
+			grablock = false;
 		}
 
-		grablock = false;
+		
 	}
 
 	void Accessories() {
@@ -315,7 +316,18 @@ public:
 	void playAuto(std::string timestamp, nlohmann::json autojson){
 		CanMechanum(autojson[timestamp][0], autojson[timestamp][1], autojson[timestamp][2], MotionTracker.GetAngle());
 		if (autojson[timestamp][3]){
-			
+			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);
+		}
+		else {
+			grabSol.Set(DoubleSolenoid::DoubleSolenoid::kForward);	
+		}
+		if (autojson[timestamp][4]){
+			m_rIntake.Set(-.95);
+			m_lIntake.Set(.95);
+		}
+		else {
+			m_rIntake.Set(autojson[timestamp][5]);
+			m_lIntake.Set(-autojson[timestamp][5]);
 		}
 	}
 	
@@ -333,6 +345,7 @@ public:
 		m_lf.Set(0);
 		m_rr.Set(0);
 		m_lr.Set(0);
+		MatchTime.Start();
 		//while(MotionTracker.IsCalibrating()){}
 		Comp->SetClosedLoopControl(true);
 		while (IsOperatorControl() && IsEnabled()) {
@@ -368,14 +381,6 @@ public:
 				else if ( lstick.GetRawButton(2)){
 					IsMechanum = false;
 				}
-//				if ((rstick.GetRawButton(1) && lstick.GetRawButton(1))){
-//					holdDown = true;
-//				}
-//				else {
-//					holdDown = false;
-//				}
-
-
 			}
 			else {
 				rightX = xdrive.GetX();
@@ -394,20 +399,10 @@ public:
 				else if ( xdrive.GetRawButton(5)){
 					IsMechanum = false;
 				}
-////				if (xdrive.GetTwist() >= .25){
-////					holdDown = true;
-////				}
-//				else {
-//					holdDown = false;
-//				}
 			}
 
 			if (IsMechanum){
-				if (false){
-					tankDrive(rightY, leftY);
-					butterflySol.Set(frc::DoubleSolenoid::kForward);
-				}
-				else if (rstick.GetRawButton(1)){
+				if (rstick.GetRawButton(1)){
 					Locate();
 				}
 				else {
@@ -433,11 +428,13 @@ public:
 				opstick.SetRumble(Joystick::kLeftRumble, 0);
 			}
 
-			if (rstick.GetRawButton(7)){
+			if (lstick.GetRawButton(1)){
+				autoTimer.Start()
 				std::vector<float> inputVector = {rightX/sqrt(2), -rightY, (leftX/2),
-												  opstick.GetRawButton(1), opstick.GetRawButton(6),
+											  	  opstick.GetRawButton(1), opstick.GetRawButton(6),
 												  opstick.GetThrottle()};
-				inputRecorder("", inputVector);
+				
+				inputRecorder(to_string(MatchTime.Get()-autoTimer.Get()), inputVector);
 			}
 
 			Wait(kUpdatePeriod);
@@ -665,7 +662,9 @@ private:
 	DoubleSolenoid grabSol {0, 1};
 	DoubleSolenoid butterflySol {2, 3};
 	DoubleSolenoid brakeSol {5, 4};
-
+	Timer MatchTime;
+	Timer autoTime;
+	
 	nt::NetworkTableInstance inst = nt::NetworkTableInstance::GetDefault();
 	std::shared_ptr<nt::NetworkTable> table = inst.GetTable("GRIP/CubeReport1");
 	nt::NetworkTableEntry entryY = table->GetEntry("centerX");
